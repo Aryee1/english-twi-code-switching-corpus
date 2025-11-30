@@ -1,0 +1,21 @@
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# VS Code settings
+.vscode/
+
+# Models (generated after training)
+models/*.joblib
+
+# Raw data (if sensitive or large)
+data/raw/*.csv
+
+# Optional: processed dataset (if you want to regenerate from raw)
+# data/processed/lid_dataset.jsonl
+
+# OS files
+.DS_Store
+Thumbs.db
