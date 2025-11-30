@@ -1,0 +1,5 @@
+conv_id,utt_id,speaker,text,tokens,lang_tags
+conv1,1,A,Today mekor school,Today mekor school,en tw en
+conv1,2,B,Okay but fa book no,Okay but fa book no,en en tw en en
+conv1,3,A,Me pɛ sɛ I rest small,Me pɛ sɛ I rest small,tw tw tw en en en
+conv1,4,B,You deɛ mente ase koraa,You deɛ mente ase koraa,en tw tw tw tw

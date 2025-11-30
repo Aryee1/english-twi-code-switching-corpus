@@ -1,0 +1,4 @@
+{"conv_id": "conv1", "utt_id": 1, "speaker": "A", "text": "Today mekor school", "tokens": ["Today", "mekor", "school"], "lang_tags": ["en", "tw", "en"]}
+{"conv_id": "conv1", "utt_id": 2, "speaker": "B", "text": "Okay but fa book no", "tokens": ["Okay", "but", "fa", "book", "no"], "lang_tags": ["en", "en", "tw", "en", "en"]}
+{"conv_id": "conv1", "utt_id": 3, "speaker": "A", "text": "Me pɛ sɛ I rest small", "tokens": ["Me", "pɛ", "sɛ", "I", "rest", "small"], "lang_tags": ["tw", "tw", "tw", "en", "en", "en"]}
+{"conv_id": "conv1", "utt_id": 4, "speaker": "B", "text": "You deɛ mente ase koraa", "tokens": ["You", "deɛ", "mente", "ase", "koraa"], "lang_tags": ["en", "tw", "tw", "tw", "tw"]}
