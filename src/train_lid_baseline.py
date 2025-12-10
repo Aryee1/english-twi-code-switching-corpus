@@ -1,81 +1,131 @@
+#!/usr/bin/env python3
+"""
+Token-only LID baseline for English–Twi code-switching.
+
+- Majority baseline: always predict the most frequent tag in TRAIN.
+- Lexicon baseline: token -> most frequent tag in TRAIN (lowercased),
+  fallback to majority tag for unseen tokens.
+"""
+
 import json
 from pathlib import Path
-from typing import List, Tuple
+from collections import Counter, defaultdict
+from typing import List, Dict, Tuple
 
-import joblib
-import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split
-
-DATA_PATH = Path("data/processed/lid_dataset.jsonl")
-MODEL_DIR = Path("models")
+from sklearn.metrics import accuracy_score, classification_report
 
 
-def load_token_level_examples(path: Path) -> Tuple[List[str], List[str]]:
-    """Load one training example per token."""
-    texts: List[str] = []
-    labels: List[str] = []
+ROOT = Path(__file__).resolve().parents[1]
+DATA = ROOT / "data" / "processed" / "lid_dataset.jsonl"
 
-    if not path.exists():
-        raise FileNotFoundError(f"Could not find dataset at {path}")
 
+def load_dataset(path: Path) -> List[dict]:
+    examples = []
     with path.open("r", encoding="utf-8") as f:
         for line in f:
-            example = json.loads(line)
-            tokens = example["tokens"]
-            tags = example["lang_tags"]
+            line = line.strip()
+            if not line:
+                continue
+            examples.append(json.loads(line))
+    return examples
 
-            for token, tag in zip(tokens, tags):
-                texts.append(token)
-                labels.append(tag)
 
-    return texts, labels
+def group_by_conv(examples: List[dict]) -> Dict[str, List[dict]]:
+    convs: Dict[str, List[dict]] = defaultdict(list)
+    for ex in examples:
+        convs[ex["conv_id"]].append(ex)
+    for cid in convs:
+        convs[cid].sort(key=lambda e: e["utt_id"])
+    return convs
+
+
+def flatten_tokens(examples: List[dict], conv_ids: List[str]) -> Tuple[List[str], List[str], List[str]]:
+    tokens = []
+    tags = []
+    conv_ids_per_token = []
+    for ex in examples:
+        cid = ex["conv_id"]
+        for tok, tag in zip(ex["tokens"], ex["lang_tags"]):
+            tokens.append(tok)
+            tags.append(tag)
+            conv_ids_per_token.append(cid)
+    return tokens, tags, conv_ids_per_token
+
+
+def split_by_conversation(conv_ids_per_token: List[str], test_size: float = 0.2, random_state: int = 42):
+    unique_convs = sorted(set(conv_ids_per_token))
+    train_convs, test_convs = train_test_split(
+        unique_convs, test_size=test_size, random_state=random_state
+    )
+    train_convs = set(train_convs)
+    test_convs = set(test_convs)
+
+    train_idx, test_idx = [], []
+    for i, cid in enumerate(conv_ids_per_token):
+        if cid in train_convs:
+            train_idx.append(i)
+        else:
+            test_idx.append(i)
+    return train_idx, test_idx
 
 
 def main():
-    MODEL_DIR.mkdir(exist_ok=True)
+    examples = load_dataset(DATA)
+    convs = group_by_conv(examples)
+    # Flatten with conv_ids per token
+    tokens = []
+    tags = []
+    conv_ids_per_token = []
+    for cid, utts in convs.items():
+        for ex in utts:
+            for tok, tag in zip(ex["tokens"], ex["lang_tags"]):
+                tokens.append(tok)
+                tags.append(tag)
+                conv_ids_per_token.append(cid)
 
-    texts, labels = load_token_level_examples(DATA_PATH)
-    print(f"Loaded {len(texts)} tokens")
+    print(f"Total tokens: {len(tokens)}")
 
-    # If the dataset is small, this split will be tiny, but that is okay for now.
-    X_train, X_test, y_train, y_test = train_test_split(
-        texts,
-        labels,
-        test_size=0.2,
-        random_state=42,
-        stratify=labels if len(set(labels)) > 1 else None,
-    )
+    train_idx, test_idx = split_by_conversation(conv_ids_per_token, test_size=0.2, random_state=42)
 
-    # Character-level TF-IDF features (good for different spelling patterns)
-    vectorizer = TfidfVectorizer(
-        analyzer="char",
-        ngram_range=(1, 4),
-        lowercase=True,
-    )
+    tok_train = [tokens[i] for i in train_idx]
+    y_train = [tags[i] for i in train_idx]
+    tok_test = [tokens[i] for i in test_idx]
+    y_test = [tags[i] for i in test_idx]
 
-    print("Fitting vectorizer...")
-    X_train_vec = vectorizer.fit_transform(X_train)
-    X_test_vec = vectorizer.transform(X_test)
+    print(f"Train tokens: {len(y_train)}, Test tokens: {len(y_test)}")
 
-    print("Training logistic regression model...")
-    clf = LogisticRegression(max_iter=1000)
-    clf.fit(X_train_vec, y_train)
+    # Majority baseline (trained on TRAIN only)
+    tag_counts = Counter(y_train)
+    majority_tag, _ = tag_counts.most_common(1)[0]
 
-    print("\n=== Sentence-only baseline performance ===")
-    y_pred = clf.predict(X_test_vec)
-    print(classification_report(y_test, y_pred))
+    y_pred_majority = [majority_tag] * len(y_test)
+    acc_majority = accuracy_score(y_test, y_pred_majority)
+    print(f"\nMajority tag (train): {majority_tag}")
+    print(f"Majority baseline accuracy (test): {acc_majority:.3f}")
 
-    print("Confusion matrix (rows = true, cols = predicted):")
-    print(confusion_matrix(y_test, y_pred, labels=sorted(set(labels))))
-    print("Labels order:", sorted(set(labels)))
+    # Lexicon baseline: token -> most frequent tag in TRAIN
+    token_tag_counts: Dict[str, Counter] = defaultdict(Counter)
+    for tok, tag in zip(tok_train, y_train):
+        token_tag_counts[tok.lower()][tag] += 1
 
-    # Save models
-    joblib.dump(vectorizer, MODEL_DIR / "vectorizer_baseline.joblib")
-    joblib.dump(clf, MODEL_DIR / "lid_baseline.joblib")
-    print(f"\nSaved baseline model and vectorizer to {MODEL_DIR}/")
+    lexicon: Dict[str, str] = {}
+    for tok, counter in token_tag_counts.items():
+        lexicon[tok] = counter.most_common(1)[0][0]
+
+    y_pred_lex = []
+    for tok in tok_test:
+        t = tok.lower()
+        if t in lexicon:
+            y_pred_lex.append(lexicon[t])
+        else:
+            y_pred_lex.append(majority_tag)
+
+    acc_lex = accuracy_score(y_test, y_pred_lex)
+    print(f"Lexicon baseline accuracy (test): {acc_lex:.3f}")
+
+    print("\nLexicon baseline classification report (test):")
+    print(classification_report(y_test, y_pred_lex, digits=3))
 
 
 if __name__ == "__main__":
